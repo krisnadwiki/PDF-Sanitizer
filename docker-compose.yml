@@ -1,0 +1,86 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# PDF Sanitizer – docker-compose.yml
+#
+# ── Web (default) ─────────────────────────────────────────────────────────
+#   docker compose up web
+#   Buka: http://localhost:8000
+#
+# ── CLI headless ──────────────────────────────────────────────────────────
+#   docker compose run --rm cli
+#
+# ── GUI via X11 (Linux/WSL2) ──────────────────────────────────────────────
+#   xhost +local:docker
+#   docker compose --profile gui up gui
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+
+  # ── Web interface (default, diakses via browser) ─────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    image: pdf-sanitizer-bpjs:web
+    container_name: pdf_sanitizer_web
+    ports:
+      - "8000:8000"
+    volumes:
+      # Upload temp dir (persist antara restart)
+      - pdf_uploads:/tmp/pdf_sanitizer_uploads
+    environment:
+      - PYTHONUNBUFFERED=1
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ── CLI headless batch convert ────────────────────────────────────────────
+  cli:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: cli
+    image: pdf-sanitizer-bpjs:cli
+    container_name: pdf_sanitizer_cli
+    profiles:
+      - cli
+    volumes:
+      - ./data/input:/input:ro
+      - ./data/output:/output
+    environment:
+      - PYTHONUNBUFFERED=1
+    command: >
+      python cli.py
+        --input  /input
+        --output /output
+        --recursive
+        --workers 4
+        --dpi 150
+    restart: "no"
+
+  # ── Desktop GUI via X11 ───────────────────────────────────────────────────
+  gui:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: gui
+    image: pdf-sanitizer-bpjs:gui
+    container_name: pdf_sanitizer_gui
+    profiles:
+      - gui
+    volumes:
+      - ./data/input:/input
+      - ./data/output:/output
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    environment:
+      - DISPLAY=${DISPLAY:-:0}
+      - QT_QPA_PLATFORM=xcb
+      - PYTHONUNBUFFERED=1
+    command: python app.py
+    restart: "no"
+
+volumes:
+  pdf_uploads:

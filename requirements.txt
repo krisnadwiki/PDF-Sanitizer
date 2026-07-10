@@ -1,0 +1,12 @@
+# Core PDF processing
+PyMuPDF==1.26.0
+pikepdf==9.3.0
+
+# Web interface
+fastapi==0.115.5
+uvicorn[standard]==0.32.1
+python-multipart==0.0.12
+
+# Desktop GUI (tidak diperlukan untuk mode web/CLI saja)
+# Python 3.13+ memerlukan PySide6 >= 6.8.0
+PySide6>=6.8.0
