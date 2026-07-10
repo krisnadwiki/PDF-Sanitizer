@@ -97,11 +97,33 @@ fileInput.addEventListener('change', () => { addFiles([...fileInput.files]); fil
 function addFiles(files) {
   const pdfs = files.filter(f => f.name.toLowerCase().endsWith('.pdf'));
   if (!pdfs.length) { toast('Hanya file PDF yang diterima.', 'error'); return; }
+
+  let skippedExact = 0;    // nama + ukuran sama persis → skip diam-diam
+  let skippedName  = [];   // nama sama, ukuran beda → warn user
+
   pdfs.forEach(f => {
-    if (!state.files.find(x => x.name === f.name && x.size === f.size)) {
-      state.files.push({ file: f, name: f.name, size: f.size, id: crypto.randomUUID() });
+    const sameName = state.files.find(x => x.name === f.name);
+    if (sameName) {
+      if (sameName.size === f.size) {
+        // Identik — buang diam-diam
+        skippedExact++;
+      } else {
+        // Nama sama tapi ukuran beda → mungkin versi lain, beri tahu user
+        skippedName.push(f.name);
+      }
+      return;
     }
+    state.files.push({ file: f, name: f.name, size: f.size, id: crypto.randomUUID() });
   });
+
+  if (skippedExact > 0) {
+    toast(`${skippedExact} file duplikat dilewati (sudah ada di antrian).`, 'info', 3000);
+  }
+  if (skippedName.length > 0) {
+    const preview = skippedName.slice(0, 3).join(', ') + (skippedName.length > 3 ? ` +${skippedName.length - 3} lainnya` : '');
+    toast(`Nama file sudah ada dengan ukuran berbeda:\n${preview}`, 'error', 5000);
+  }
+
   renderUploadQueue();
 }
 
@@ -289,24 +311,49 @@ $('btnScan').addEventListener('click', async () => {
     const data = await res.json();
     if (data.error) { toast(data.error, 'error'); return; }
 
-    // Animasikan hasil satu per satu untuk efek streaming
-    for (const r of data.results) {
-      const idx = state.scanResults.findIndex(x => x.fid === r.fid);
-      if (idx >= 0) state.scanResults[idx] = { ...state.scanResults[idx], ...r, scanned: true };
-      else state.scanResults.push({ ...r, scanned: true });
+    // ── Animasi progress per-frame ────────────────────────────────────────
+    // Setiap requestAnimationFrame = 1 render frame (~16ms).
+    // Kita proses N item per frame agar progress terlihat bergerak smooth
+    // tanpa membuat browser freeze pada dataset besar.
+    await new Promise(resolve => {
+      const results  = data.results;
+      const total    = results.length;
+      // Proses lebih banyak item per frame jika file banyak,
+      // minimal 1 agar selalu ada visual update.
+      const CHUNK    = Math.max(1, Math.ceil(total / 60));
+      let   cursor   = 0;
 
-      done++;
-      if (!r.safe) unsafe++;
+      function processChunk() {
+        const end = Math.min(cursor + CHUNK, total);
+        for (; cursor < end; cursor++) {
+          const r   = results[cursor];
+          const idx = state.scanResults.findIndex(x => x.fid === r.fid);
+          if (idx >= 0) state.scanResults[idx] = { ...state.scanResults[idx], ...r, scanned: true };
+          else state.scanResults.push({ ...r, scanned: true });
+          if (!r.safe) unsafe++;
+        }
 
-      const pct = Math.round(done / data.results.length * 100);
-      $('scanProgressBar').style.width     = pct + '%';
-      $('scanProgressLabel').textContent   = r.name;
-      $('scanProgressSub').textContent     = r.error ? `⚠ ${r.error}` : (r.safe ? '✔ Aman' : `⚠ ${(r.issues||[]).join(', ')}`);
-      $('scanProgressCounter').textContent = `${done} / ${data.results.length}`;
+        done = cursor;
+        const pct = Math.round(done / total * 100);
+        const last = results[cursor - 1];
 
-      // Yield ke browser setiap 5 file agar UI tidak freeze
-      if (done % 5 === 0) await new Promise(r => setTimeout(r, 0));
-    }
+        // Update DOM — acontece uma vez por frame, browser renderiza
+        $('scanProgressBar').style.width     = pct + '%';
+        $('scanProgressCounter').textContent = `${done} / ${total}`;
+        $('scanProgressLabel').textContent   = last.name;
+        $('scanProgressSub').textContent     = last.error
+          ? `⚠ ${last.error}`
+          : last.safe ? '✔ Aman' : `⚠ ${(last.issues || []).join(', ')}`;
+
+        if (cursor < total) {
+          requestAnimationFrame(processChunk);
+        } else {
+          resolve();
+        }
+      }
+
+      requestAnimationFrame(processChunk);
+    });
 
     // Update stats
     $('scanStats').style.display = '';
