@@ -111,6 +111,21 @@
           Upload &amp; Lanjutkan ke Scan
         </button>
       </div>
+
+      <!-- Upload progress (hidden until running) -->
+      <div id="uploadProgressWrap" style="display:none" class="upload-progress-wrap">
+        <div class="upload-progress-inner">
+          <div class="spinner spinner-sm"></div>
+          <div class="upload-progress-text">
+            <div class="upload-progress-title" id="uploadProgressLabel">Mengupload…</div>
+            <div class="upload-progress-sub" id="uploadProgressSub"></div>
+          </div>
+          <div class="upload-progress-pct" id="uploadProgressPct">0%</div>
+        </div>
+        <div class="progress-bar-track" style="margin-top:8px">
+          <div class="progress-bar-fill" id="uploadProgressBar" style="width:0%"></div>
+        </div>
+      </div>
     </div>
 
   </section>
@@ -163,11 +178,18 @@
     </div>
 
     <!-- Scan progress -->
-    <div id="scanProgressWrap" style="display:none" class="progress-wrap">
-      <div class="progress-bar-track">
+    <div id="scanProgressWrap" style="display:none" class="scan-progress-wrap">
+      <div class="scan-progress-inner">
+        <div class="spinner" id="scanSpinner"></div>
+        <div class="scan-progress-text">
+          <div class="scan-progress-title" id="scanProgressLabel">Memulai scan…</div>
+          <div class="scan-progress-sub" id="scanProgressSub"></div>
+        </div>
+        <div class="scan-progress-counter" id="scanProgressCounter"></div>
+      </div>
+      <div class="progress-bar-track" style="margin-top:10px">
         <div class="progress-bar-fill" id="scanProgressBar" style="width:0%"></div>
       </div>
-      <span class="progress-label" id="scanProgressLabel">Scanning…</span>
     </div>
 
     <!-- Table -->
@@ -245,15 +267,41 @@
       </div>
 
       <div class="progress-main">
+        <!-- Progress bar -->
         <div class="progress-bar-track large">
           <div class="progress-bar-fill" id="sanitizeProgressBar" style="width:0%"></div>
         </div>
+
+        <!-- Meta row -->
         <div class="progress-meta">
-          <span id="sanitizePct">0%</span>
-          <span id="sanitizeCount">0 / 0</span>
-          <span>ETA: <strong id="sanitizeEta">–</strong></span>
+          <span class="progress-pct-badge" id="sanitizePct">0%</span>
+          <span id="sanitizeCount" style="font-weight:600">0 / 0 file</span>
+          <span class="progress-speed" id="sanitizeSpeed">–</span>
         </div>
-        <p class="current-file" id="sanitizeCurrentFile">–</p>
+
+        <!-- ETA ticker -->
+        <div class="eta-row">
+          <div class="eta-block">
+            <span class="eta-label">Waktu Berjalan</span>
+            <span class="eta-value" id="sanitizeElapsed">0:00</span>
+          </div>
+          <div class="eta-sep">·</div>
+          <div class="eta-block">
+            <span class="eta-label">Estimasi Selesai</span>
+            <span class="eta-value eta-value--eta" id="sanitizeEta">Menghitung…</span>
+          </div>
+          <div class="eta-sep">·</div>
+          <div class="eta-block">
+            <span class="eta-label">Kecepatan</span>
+            <span class="eta-value" id="sanitizeRate">– file/dtk</span>
+          </div>
+        </div>
+
+        <!-- Current file -->
+        <div class="current-file-row">
+          <div class="spinner spinner-sm" id="sanitizeSpinner"></div>
+          <p class="current-file" id="sanitizeCurrentFile">Memulai…</p>
+        </div>
       </div>
 
       <!-- Stat cards -->

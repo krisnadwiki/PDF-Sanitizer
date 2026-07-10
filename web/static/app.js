@@ -133,37 +133,95 @@ function renderUploadQueue() {
 
 $('btnClearQueue').addEventListener('click', () => { state.files = []; renderUploadQueue(); });
 
-$('btnUpload').addEventListener('click', async () => {
+$('btnUpload').addEventListener('click', () => {
   if (!state.files.length) return;
-  const btn = $('btnUpload');
+
+  const btn       = $('btnUpload');
+  const wrap      = $('uploadProgressWrap');
+  const bar       = $('uploadProgressBar');
+  const pctEl     = $('uploadProgressPct');
+  const labelEl   = $('uploadProgressLabel');
+  const subEl     = $('uploadProgressSub');
+
+  // Hitung total ukuran untuk label
+  const totalBytes = state.files.reduce((s, f) => s + f.size, 0);
+
   btn.disabled = true;
-  btn.textContent = 'Mengupload…';
+  btn.innerHTML = `<div class="spinner spinner-sm"></div> Mengupload…`;
+  $('btnClearQueue').disabled = true;
+
+  wrap.style.display = '';
+  bar.style.width    = '0%';
+  pctEl.textContent  = '0%';
+  labelEl.textContent = `Mengupload ${state.files.length} file…`;
+  subEl.textContent  = `0 B / ${fmtSize(totalBytes)}`;
 
   const form = new FormData();
   state.files.forEach(f => form.append('files', f.file));
-  if (state.sid) form.append('sid', state.sid);  // tambahkan ke existing session
+  if (state.sid) form.append('sid', state.sid);
 
-  try {
-    const res = await fetch('/api/upload', { method: 'POST', body: form });
-    const data = await res.json();
-    state.sid = data.sid;
-    // Merge uploaded ke scanResults placeholder
-    data.uploaded.forEach(u => {
-      if (!state.scanResults.find(r => r.fid === u.fid)) {
-        state.scanResults.push({ fid: u.fid, name: u.name, size_fmt: fmtSize(u.size), scanned: false });
-      }
-    });
-    toast(`${data.uploaded.length} file berhasil diupload.`, 'success');
-    state.files = [];
-    renderUploadQueue();
-    switchTab('scan');
-    renderScanTable();
-  } catch (e) {
-    toast('Upload gagal: ' + e.message, 'error');
-  } finally {
+  const xhr = new XMLHttpRequest();
+
+  // ── Track progress upload ke server ──────────────────────────────────
+  xhr.upload.addEventListener('progress', e => {
+    if (!e.lengthComputable) return;
+    const pct = Math.round(e.loaded / e.total * 100);
+    bar.style.width   = pct + '%';
+    pctEl.textContent = pct + '%';
+    subEl.textContent = `${fmtSize(e.loaded)} / ${fmtSize(e.total)}`;
+    if (pct >= 100) {
+      labelEl.textContent = 'Memproses di server…';
+      subEl.textContent   = 'Harap tunggu…';
+    }
+  });
+
+  // ── Selesai ───────────────────────────────────────────────────────────
+  xhr.addEventListener('load', () => {
+    try {
+      const data = JSON.parse(xhr.responseText);
+      state.sid = data.sid;
+      data.uploaded.forEach(u => {
+        if (!state.scanResults.find(r => r.fid === u.fid)) {
+          state.scanResults.push({ fid: u.fid, name: u.name, size_fmt: fmtSize(u.size), scanned: false });
+        }
+      });
+
+      // Animasi selesai sebelum pindah tab
+      bar.style.width    = '100%';
+      pctEl.textContent  = '100%';
+      labelEl.textContent = `✔ ${data.uploaded.length} file berhasil diupload`;
+      subEl.textContent  = '';
+
+      toast(`${data.uploaded.length} file berhasil diupload.`, 'success');
+      state.files = [];
+      renderUploadQueue();
+
+      setTimeout(() => {
+        wrap.style.display = 'none';
+        switchTab('scan');
+        renderScanTable();
+      }, 700);
+
+    } catch {
+      toast('Upload gagal: respons tidak valid.', 'error');
+      wrap.style.display = 'none';
+    }
+  });
+
+  // ── Error ─────────────────────────────────────────────────────────────
+  xhr.addEventListener('error', () => {
+    toast('Upload gagal: koneksi terputus.', 'error');
+    wrap.style.display = 'none';
+  });
+
+  xhr.addEventListener('loadend', () => {
     btn.disabled = false;
     btn.innerHTML = `<svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M10 3a1 1 0 01.707.293l4 4a1 1 0 01-1.414 1.414L11 6.414V14a1 1 0 11-2 0V6.414L6.707 8.707A1 1 0 015.293 7.293l4-4A1 1 0 0110 3z"/></svg> Upload &amp; Lanjutkan ke Scan`;
-  }
+    $('btnClearQueue').disabled = false;
+  });
+
+  xhr.open('POST', '/api/upload');
+  xhr.send(form);
 });
 
 // Clear session
@@ -189,13 +247,40 @@ let scanFilter = 'all';
 
 $('btnScan').addEventListener('click', async () => {
   if (!state.sid) { toast('Tidak ada file. Upload dulu.', 'error'); return; }
-  const btn = $('btnScan');
+
+  const btn   = $('btnScan');
+  const total = state.scanResults.length;
   btn.disabled = true;
-  $('scanProgressWrap').style.display = '';
+  btn.innerHTML = `<div class="spinner spinner-sm"></div> Scanning…`;
+
+  // Reset scan state
+  state.scanResults.forEach(r => { r.scanned = false; });
+
+  // Tampilkan progress wrap
+  const wrap = $('scanProgressWrap');
+  wrap.style.display = '';
   $('scanProgressBar').style.width = '0%';
-  $('scanProgressLabel').textContent = 'Memulai scan…';
+  $('scanProgressLabel').textContent = 'Menghubungi server…';
+  $('scanProgressSub').textContent   = '';
+  $('scanProgressCounter').textContent = `0 / ${total}`;
+  $('scanStats').style.display = 'none';
+
+  // Kosongkan tabel sementara scan berjalan
+  $('scanTbody').innerHTML = `<tr class="empty-row"><td colspan="9">
+    <div style="display:flex;align-items:center;justify-content:center;gap:8px;padding:32px">
+      <div class="spinner"></div>
+      <span>Sedang scan file…</span>
+    </div>
+  </td></tr>`;
+
+  let done = 0;
+  let unsafe = 0;
 
   try {
+    // Gunakan SSE-style: fetch JSON biasa tapi update UI saat selesai
+    // Server memproses semua sekaligus, kita simulasi progress saat parse
+    $('scanProgressLabel').textContent = 'Menganalisa file…';
+
     const res  = await fetch('/api/scan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -204,25 +289,44 @@ $('btnScan').addEventListener('click', async () => {
     const data = await res.json();
     if (data.error) { toast(data.error, 'error'); return; }
 
-    // Merge hasil ke state
-    data.results.forEach(r => {
+    // Animasikan hasil satu per satu untuk efek streaming
+    for (const r of data.results) {
       const idx = state.scanResults.findIndex(x => x.fid === r.fid);
       if (idx >= 0) state.scanResults[idx] = { ...state.scanResults[idx], ...r, scanned: true };
       else state.scanResults.push({ ...r, scanned: true });
-    });
 
-    $('scanProgressBar').style.width = '100%';
-    $('scanProgressLabel').textContent = `Scan selesai — ${data.results.length} file.`;
-    $('btnExportCsv').disabled = false;
+      done++;
+      if (!r.safe) unsafe++;
+
+      const pct = Math.round(done / data.results.length * 100);
+      $('scanProgressBar').style.width     = pct + '%';
+      $('scanProgressLabel').textContent   = r.name;
+      $('scanProgressSub').textContent     = r.error ? `⚠ ${r.error}` : (r.safe ? '✔ Aman' : `⚠ ${(r.issues||[]).join(', ')}`);
+      $('scanProgressCounter').textContent = `${done} / ${data.results.length}`;
+
+      // Yield ke browser setiap 5 file agar UI tidak freeze
+      if (done % 5 === 0) await new Promise(r => setTimeout(r, 0));
+    }
+
+    // Update stats
     $('scanStats').style.display = '';
     updateScanStats();
     renderScanTable();
-    toast('Scan selesai.', 'success');
+
+    // Sembunyikan progress setelah jeda
+    $('scanProgressLabel').textContent = `✔ Scan selesai — ${data.results.length} file, ${unsafe} bermasalah`;
+    $('scanProgressSub').textContent   = '';
+    $('btnExportCsv').disabled = false;
+    setTimeout(() => { wrap.style.display = 'none'; }, 2500);
+
+    toast(`Scan selesai — ${data.results.length} file.`, 'success');
+
   } catch (e) {
     toast('Scan gagal: ' + e.message, 'error');
+    $('scanProgressLabel').textContent = '✖ Scan gagal';
   } finally {
     btn.disabled = false;
-    setTimeout(() => $('scanProgressWrap').style.display = 'none', 2000);
+    btn.innerHTML = `<svg viewBox="0 0 20 20" fill="currentColor" width="16" height="16"><path d="M9 9a2 2 0 114 0 2 2 0 01-4 0z"/><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a4 4 0 00-3.446 6.032l-2.261 2.26a1 1 0 101.414 1.415l2.261-2.261A4 4 0 1011 5z" clip-rule="evenodd"/></svg> Scan Semua File`;
   }
 });
 
@@ -403,15 +507,30 @@ async function startSanitize() {
   $('sanitizeDownloadRow').style.display = 'none';
   $('sanitizeLog').innerHTML = '';
   $('sanitizeProgressBar').style.width = '0%';
-  $('sanitizePct').textContent = '0%';
-  $('sanitizeCount').textContent = `0 / ${fids.length}`;
-  $('sanitizeEta').textContent = '–';
+  $('sanitizePct').textContent     = '0%';
+  $('sanitizeCount').textContent   = `0 / ${fids.length} file`;
+  $('sanitizeEta').textContent     = 'Menghitung…';
+  $('sanitizeElapsed').textContent = '0:00';
+  $('sanitizeRate').textContent    = '– file/dtk';
+  $('sanitizeSpeed').textContent   = '';
   $('sanitizeCurrentFile').textContent = 'Memulai…';
-  $('sanitizeStatusBadge').textContent = 'Memproses…';
-  $('sanitizeStatusBadge').className = 'badge badge-orange';
+  $('sanitizeStatusBadge').textContent  = 'Memproses…';
+  $('sanitizeStatusBadge').className    = 'badge badge-orange';
   $('sSuccess').textContent = '0';
   $('sFailed').textContent  = '0';
   $('sTotal').textContent   = fids.length;
+  $('sanitizeSpinner').style.display = '';
+
+  // Mulai ticker elapsed time
+  const tStart = Date.now();
+  const elapsedTicker = setInterval(() => {
+    const s = Math.floor((Date.now() - tStart) / 1000);
+    const m = Math.floor(s / 60);
+    $('sanitizeElapsed').textContent = `${m}:${String(s % 60).padStart(2, '0')}`;
+  }, 1000);
+
+  state._elapsedTicker = elapsedTicker;
+  state._tStart        = tStart;
 
   try {
     const res  = await fetch('/api/sanitize', {
@@ -425,6 +544,7 @@ async function startSanitize() {
     state.currentJobId = data.job_id;
     connectWebSocket(data.job_id, fids.length);
   } catch (e) {
+    clearInterval(elapsedTicker);
     toast('Gagal memulai sanitize: ' + e.message, 'error');
   }
 }
@@ -438,13 +558,24 @@ function connectWebSocket(jobId, total) {
 
     if (msg.type === 'progress') {
       const pct = msg.pct;
-      $('sanitizeProgressBar').style.width = pct + '%';
-      $('sanitizePct').textContent   = pct + '%';
-      $('sanitizeCount').textContent = `${msg.done} / ${msg.total}`;
-      $('sanitizeEta').textContent   = msg.eta;
+      $('sanitizeProgressBar').style.width  = pct + '%';
+      $('sanitizePct').textContent          = pct + '%';
+      $('sanitizeCount').textContent        = `${msg.done} / ${msg.total} file`;
+
+      // ETA dari server (sudah dihitung backend)
+      $('sanitizeEta').textContent = msg.eta || '–';
+
+      // Hitung rate dari waktu berjalan
+      const elapsed = (Date.now() - (state._tStart || Date.now())) / 1000;
+      if (elapsed > 0 && msg.done > 0) {
+        const rate = msg.done / elapsed;
+        $('sanitizeRate').textContent = rate >= 1
+          ? `${rate.toFixed(1)} file/dtk`
+          : `${(rate * 60).toFixed(1)} file/mnt`;
+      }
+
       if (msg.entry) {
-        $('sanitizeCurrentFile').textContent = msg.entry.name;
-        // Update counters
+        $('sanitizeCurrentFile').textContent = `⚙ ${msg.entry.name}`;
         const job = jobs_local[jobId] || (jobs_local[jobId] = { success: 0, failed: 0 });
         if (msg.entry.status === 'success') job.success++;
         else job.failed++;
@@ -455,24 +586,30 @@ function connectWebSocket(jobId, total) {
     }
 
     if (msg.type === 'done') {
-      $('sanitizeProgressBar').style.width = '100%';
-      $('sanitizePct').textContent   = '100%';
-      $('sanitizeCount').textContent = `${msg.total} / ${msg.total}`;
-      $('sanitizeEta').textContent   = '–';
-      $('sanitizeCurrentFile').textContent = 'Selesai.';
-      $('sanitizeStatusBadge').textContent = 'Selesai';
-      $('sanitizeStatusBadge').className   = 'badge badge-green';
+      // Hentikan ticker
+      if (state._elapsedTicker) {
+        clearInterval(state._elapsedTicker);
+        state._elapsedTicker = null;
+      }
+
+      $('sanitizeProgressBar').style.width  = '100%';
+      $('sanitizePct').textContent          = '100%';
+      $('sanitizeCount').textContent        = `${msg.total} / ${msg.total} file`;
+      $('sanitizeEta').textContent          = 'Selesai ✔';
+      $('sanitizeRate').textContent         = '–';
+      $('sanitizeCurrentFile').textContent  = 'Semua file selesai diproses.';
+      $('sanitizeStatusBadge').textContent  = 'Selesai';
+      $('sanitizeStatusBadge').className    = 'badge badge-green';
       $('sSuccess').textContent = msg.success;
       $('sFailed').textContent  = msg.failed;
       $('sTotal').textContent   = msg.total;
+      $('sanitizeSpinner').style.display    = 'none';
       $('sanitizeDownloadRow').style.display = '';
 
-      // Download button
       $('btnDownload').onclick = () => {
         window.location = `/api/download/${msg.job_id}`;
       };
 
-      // Simpan ke history
       addHistory({
         job_id:    msg.job_id,
         total:     msg.total,
@@ -487,7 +624,10 @@ function connectWebSocket(jobId, total) {
     }
   };
 
-  ws.onerror = () => toast('Koneksi WebSocket terputus.', 'error');
+  ws.onerror = () => {
+    if (state._elapsedTicker) clearInterval(state._elapsedTicker);
+    toast('Koneksi WebSocket terputus.', 'error');
+  };
 
   // Keep-alive ping
   const ping = setInterval(() => { if (ws.readyState === 1) ws.send('ping'); else clearInterval(ping); }, 15000);

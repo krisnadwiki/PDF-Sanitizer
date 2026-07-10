@@ -447,3 +447,93 @@ body { display: flex; }
   .topbar { padding: 12px 0 10px; margin-bottom: 14px; }
   .page-title { font-size: 16px; }
 }
+
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
+.spinner {
+  width: 20px; height: 20px; flex-shrink: 0;
+  border: 2.5px solid var(--gray-200);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+.spinner-sm { width: 14px; height: 14px; border-width: 2px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Scan progress wrap ──────────────────────────────────────────────────── */
+.scan-progress-wrap {
+  background: #fff;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+.scan-progress-inner {
+  display: flex; align-items: center; gap: 12px;
+}
+.scan-progress-text { flex: 1; min-width: 0; }
+.scan-progress-title {
+  font-size: 13px; font-weight: 600; color: var(--gray-800);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.scan-progress-sub {
+  font-size: 11px; color: var(--gray-400); margin-top: 2px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.scan-progress-counter {
+  font-size: 13px; font-weight: 700; color: var(--blue);
+  white-space: nowrap; flex-shrink: 0;
+}
+
+/* ── ETA block ───────────────────────────────────────────────────────────── */
+.eta-row {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 12px;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 8px;
+  padding: 10px 16px;
+  flex-wrap: wrap;
+}
+.eta-block { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; min-width: 80px; }
+.eta-sep   { color: var(--gray-300); font-size: 18px; font-weight: 300; }
+.eta-label { font-size: 10px; font-weight: 600; color: var(--gray-400); text-transform: uppercase; letter-spacing: .5px; }
+.eta-value { font-size: 18px; font-weight: 800; color: var(--gray-800); font-variant-numeric: tabular-nums; }
+.eta-value--eta { color: var(--blue); }
+
+/* ── Progress pct badge ──────────────────────────────────────────────────── */
+.progress-pct-badge {
+  font-size: 15px; font-weight: 800;
+  color: var(--blue);
+  min-width: 48px;
+}
+.progress-speed { font-size: 12px; color: var(--gray-400); }
+
+/* ── Current file row ────────────────────────────────────────────────────── */
+.current-file-row {
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 10px;
+}
+.current-file-row .current-file { margin-top: 0; }
+
+/* ── Upload progress ─────────────────────────────────────────────────────── */
+.upload-progress-wrap {
+  padding: 12px 18px 14px;
+  border-top: 1px solid var(--gray-100);
+  background: var(--gray-50);
+}
+.upload-progress-inner {
+  display: flex; align-items: center; gap: 10px;
+}
+.upload-progress-text { flex: 1; min-width: 0; }
+.upload-progress-title {
+  font-size: 13px; font-weight: 600; color: var(--gray-800);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.upload-progress-sub {
+  font-size: 11px; color: var(--gray-400); margin-top: 2px;
+}
+.upload-progress-pct {
+  font-size: 14px; font-weight: 800; color: var(--blue);
+  flex-shrink: 0; min-width: 40px; text-align: right;
+}
